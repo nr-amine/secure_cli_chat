@@ -15,16 +15,16 @@ you just need python and the cryptography library.
 
     pip install cryptography
 
-1. start the server first:
-
+start the server first:
+   
     python server.py
 
-2. open another terminal and run the client:
+open another terminal and run the client:
 
     python client.py
 
-3. pick a username. it will freeze for a second to generate your keys, then send your public key to the server.
-4. type `/getkey [username]` to fetch someone else's public key from the server directory.
+4. pick a username. it will freeze for a second to generate your keys, then send your public key to the server.
+5. type `/getkey [username]` to fetch someone else's public key from the server directory.
 
 ### to-do / roadmap
 - [x] basic multi-threaded socket chat
