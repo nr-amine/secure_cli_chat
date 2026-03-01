@@ -3,10 +3,21 @@ import threading
 from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 
-def listner(client_socket):
+
+pub_keys_d = {}
+
+def listener(client_socket):
     while True:
         try:
-            msg = client_socket.recv(1024)
+            msg = client_socket.recv(2048)
+            if msg.startswith(b"KEY//"):
+                parts = msg.split(b"//", 2)
+                target_user = parts[1].decode('utf-8')
+                target_key = parts[2]
+                m_key = serialization.load_pem_public_key(target_key)
+                pub_keys_d[target_user] = m_key
+                print(f"Public key received for {target_user})")
+                continue
             if not msg:
                 print("Message is empty, exiting...")
                 break
@@ -27,14 +38,18 @@ def start_client():
     public_key = private_key.public_key()
     ser_key = public_key.public_bytes(encoding=serialization.Encoding.PEM,
                                       format=serialization.PublicFormat.SubjectPublicKeyInfo)
-    handshake_msg = f"EXCHANGE//{username}//{ser_key}//"
-    print(f"Connected to server at {host}:{port}")
-    client_socket.send(handshake_msg.encode('utf-8'))
+    handshake_bytes = b"EXCHANGE//" + username.encode('utf-8') + b"//" + ser_key
+    print("Sending handshake to server...")
+    client_socket.send(handshake_bytes)
 
-    thr = threading.Thread(target=listner, args=(client_socket,))
+    thr = threading.Thread(target=listener, args=(client_socket,))
     thr.start()
     while True:
         msg = input()
+        if msg.startswith("/getkey"):
+            _, target_user = msg.split()
+            client_socket.send(f"GETKEY//{target_user}".encode('utf-8'))
+            continue
         if msg.lower() == "exit":
             print("Exiting...")
             break
