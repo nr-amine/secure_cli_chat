@@ -1,6 +1,6 @@
 # secure-cli-chat (wip)
 
-making a secure terminal messaging app from scratch for my portfolio. moving away from basic scripts to applied crypto. 
+making a secure terminal messaging app from scratch. Mainly to move away from basic scripts to applied crypto. 
 
 right now it just handles the networking and rsa key distribution. the actual message encryption is the next step.
 
