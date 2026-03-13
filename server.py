@@ -4,21 +4,32 @@ import threading
 users_d = {}
 
 
+def deliver_connected_users():
+    if not users_d:
+        return "No users connected."
+    print("Connected users:")
+    return ",".join([usr_info[0] for usr_info in users_d.values() if usr_info is not None])
+        
+
+
 def handler(con, addr):
     print(f"Connection established at {addr}")
 
     while True:
         try:
-            msg = con.recv(2048)
+            # Increased size from 2048 to 4096 because of size issues #
+            msg = con.recv(4096)
             if not msg:
                 print("Empty message, exiting...")
                 break
+
             if msg.startswith(b"EXCHANGE//"):
-                _, username, ser_key, _ = msg.decode('utf-8').split("//")
+                _, username, ser_key = msg.decode('utf-8').split("//", 2)
                 users_d[con] = (username, ser_key)
                 print(f"User {username} has joined the chat.")
                 print(f"Directory saved for {username} with public key.")
                 continue
+
             if msg.startswith(b"GETKEY//"):
                 _, target_user = msg.decode('utf-8').split("//")
                 found = False
@@ -30,6 +41,21 @@ def handler(con, addr):
                 if not found:
                     con.send(f"ERROR//User {target_user} not found.".encode('utf-8'))
                 continue
+
+            if msg.startswith(b"//USERS"):
+                user_list = deliver_connected_users()
+                con.send(f"USERS//{user_list}".encode('utf-8'))
+                continue
+
+            if msg.startswith(b"MSG//"):
+                _, target_user, encrypted_msg = msg.split(b"//", 2)
+                target_user = target_user.decode('utf-8')
+                for usr_con, usr_info in users_d.items():
+                    if usr_info is not None and usr_info[0] == target_user:
+                        usr_con.send(b"MSG//" + target_user.encode('utf-8') + b"//" + encrypted_msg)
+                        break
+                continue
+
             print(msg.decode('utf-8'))
             for usr in users_d:
                 if usr != con:
