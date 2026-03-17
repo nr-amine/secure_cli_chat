@@ -4,6 +4,8 @@ from cryptography.hazmat.primitives.asymmetric import rsa
 from cryptography.hazmat.primitives import serialization
 from cryptography.hazmat.primitives.asymmetric import padding
 from cryptography.hazmat.primitives import hashes
+from cryptography.hazmat.primitives.ciphers.aead import AESGCM
+import os
 
 pub_keys_d = {}
 
@@ -22,11 +24,21 @@ def listener(client_socket, private_key):
 
             if msg.startswith(b"MSG//"):
                 parts = msg.split(b"//", 2)
-                encrypted_msg = parts[2]
-                decrypted_msg = private_key.decrypt(encrypted_msg,
-                                                     padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                                                                          algorithm=hashes.SHA256(),
-                                                                          label=None))
+                full_encrypted_blob = parts[2]
+                
+                encrypted_aes_key = full_encrypted_blob[:256]
+                nonce = full_encrypted_blob[256:256+12]
+                encrypted_msg = full_encrypted_blob[256+12:]
+
+                aes_key = private_key.decrypt(
+                    encrypted_aes_key,
+                    padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                                 algorithm=hashes.SHA256(),
+                                 label=None)
+                )
+                
+                aesgcm = AESGCM(aes_key)
+                decrypted_msg = aesgcm.decrypt(nonce, encrypted_msg, None)
                 print(f"Decrypted message from {parts[1].decode('utf-8')}: {decrypted_msg.decode('utf-8')}")
                 continue
 
@@ -53,7 +65,7 @@ def start_client():
     print("Choose you username: ", end="")
     username = input()
 
-    ###### Key Generation ######
+    ###### RSA Key Generation ######
 
     print("Generating RSA keys...")
     private_key = rsa.generate_private_key(public_exponent=65537, key_size=2048)
@@ -83,12 +95,23 @@ def start_client():
                 print(f"Public key for {target_user} not found. Use /getkey to retrieve it.")
                 continue
             target_pub_key = pub_keys_d[target_user]
-            encrypted_msg = target_pub_key.encrypt(message.encode('utf-8'),
-                                                  padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
-                                                               algorithm=hashes.SHA256(),
-                                                               label=None))
+
+            aes_key = AESGCM.generate_key(bit_length=128)
+            aesgcm = AESGCM(aes_key)
+            nonce = os.urandom(12)
+
+            encrypted_msg = aesgcm.encrypt(nonce, message.encode('utf-8'), None)
             
-            targeted_msg = b"MSG//" + target_user.encode('utf-8') + b"//" + encrypted_msg
+            encrypted_aes_key = target_pub_key.encrypt(
+                aes_key,
+                padding.OAEP(mgf=padding.MGF1(algorithm=hashes.SHA256()),
+                             algorithm=hashes.SHA256(),
+                             label=None)
+            )
+            
+            full_encrypted_pk = encrypted_aes_key + nonce + encrypted_msg
+            
+            targeted_msg = b"MSG//" + target_user.encode('utf-8') + b"//" + full_encrypted_pk
             client_socket.send(targeted_msg)
             continue
 

@@ -50,9 +50,12 @@ def handler(con, addr):
             if msg.startswith(b"MSG//"):
                 _, target_user, encrypted_msg = msg.split(b"//", 2)
                 target_user = target_user.decode('utf-8')
+                
+                sender_user = users_d[con][0]
+
                 for usr_con, usr_info in users_d.items():
                     if usr_info is not None and usr_info[0] == target_user:
-                        usr_con.send(b"MSG//" + target_user.encode('utf-8') + b"//" + encrypted_msg)
+                        usr_con.send(b"MSG//" + sender_user.encode('utf-8') + b"//" + encrypted_msg)
                         break
                 continue
 
