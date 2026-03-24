@@ -29,5 +29,5 @@ open another terminal and run the client:
 ### to-do / roadmap
 - [x] basic multi-threaded socket chat
 - [x] rsa key generation and server-side directory
-- [ ] phase 3: actually use the keys to encrypt the messages (hybrid encryption with aes)
+- [x] phase 3: actually use the keys to encrypt the messages (hybrid encryption with aes)
 - [ ] phase 4: forward secrecy
