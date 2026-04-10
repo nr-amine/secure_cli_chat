@@ -26,7 +26,7 @@ open another terminal and run the client:
 4. pick a username. it will freeze for a second to generate your keys, then send your public key to the server.
 5. type `/getkey [username]` to fetch someone else's public key from the server directory.
 
-### to-do / roadmap
+### to-do 
 - [x] basic multi-threaded socket chat
 - [x] rsa key generation and server-side directory
 - [x] phase 3: actually use the keys to encrypt the messages (hybrid encryption with aes)
