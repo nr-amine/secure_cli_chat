@@ -29,5 +29,5 @@ open another terminal and run the client:
 ### to-do 
 - [x] basic multi-threaded socket chat
 - [x] rsa key generation and server-side directory
-- [x] phase 3: actually use the keys to encrypt the messages (hybrid encryption with aes)
-- [ ] phase 4: forward secrecy
+- [x] actually use the keys to encrypt the messages (hybrid encryption with aes)
+- [ ] forward secrecy (Diffie hellman?)
