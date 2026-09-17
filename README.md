@@ -22,17 +22,13 @@ A terminal-based end-to-end encrypted messaging application built in Python. Com
                            (via Relay)
 ```
 
-### Hybrid Cryptosystem
-1. **Asymmetric Key Exchange:** Each client generates an ephemeral 2048-bit RSA key pair on startup (`e = 65537`). The public key is serialized to PEM format and registered with the server directory.
-2. **Symmetric Payload Encryption (AEAD):** Direct messages (`/msg`) generate an ephemeral 128-bit AES key and a 96-bit cryptographically secure random nonce (`os.urandom(12)`). Payloads are encrypted using **AES-GCM**, providing authenticated encryption with integrity guarantees.
-3. **Key Encapsulation:** The AES session key is wrapped using **RSA-OAEP** with SHA-256 and MGF1, then bundled with the nonce and ciphertext into a Base64 payload.
+### How the Encryption Works
+1. **RSA Key Pair:** When a client starts, it generates a 2048-bit RSA key pair and registers its public key with the server directory.
+2. **AES-GCM for Messages:** When sending a direct message (`/msg`), the client creates a fresh random 128-bit AES key and a 12-byte random nonce. The message is encrypted using AES-GCM (so the recipient can verify it wasn't tampered with).
+3. **Sending the Key:** The AES key itself is encrypted with the recipient's RSA public key (using OAEP padding). Both the encrypted key, the nonce, and the ciphertext are bundled together and sent over the socket.
 
-### Length-Prefixed Protocol Framing (`protocol.py`)
-Rather than fragile string delimiters, all messages are framed over the wire using a 4-byte big-endian length prefix:
-```
-[ 4-byte Big-Endian Length (N) ] [ N bytes of UTF-8 JSON Payload ]
-```
-This guarantees strict TCP stream framing and eliminates packet fragmentation or truncation bugs across varying payload sizes.
+### Socket Message Framing (`protocol.py`)
+Instead of using fragile string delimiters (like splitting on `//`), every message is sent with a 4-byte prefix indicating its length. This ensures the receiver reads the exact message size without cutting off packets or mixing up binary data.
 
 ---
 
@@ -47,7 +43,7 @@ pip install cryptography
 ```bash
 python server.py
 ```
-Listens on `127.0.0.1:1234` with synchronized thread-safe client routing (`threading.Lock`).
+Listens on `127.0.0.1:1234` with thread-safe client routing (`threading.Lock`).
 
 ### 2. Launch Clients
 In separate terminals:
@@ -74,9 +70,9 @@ python -m unittest test_chat.py
 
 ---
 
-## Known Security Limitations & Design Trade-offs
+## Known Limitations
 
-* **Untrusted Directory & Lack of PKI:** The central server acts as an unauthenticated key directory. A compromised or malicious server could substitute public keys (Man-In-The-Middle). Production deployment requires public key fingerprint verification (TOFU) or digital signatures.
-* **No Perfect Forward Secrecy (PFS):** Session keys are encrypted under the recipient's static session RSA key. Compromise of the private key would expose previously recorded messages. Implementing Ephemeral Diffie-Hellman (X25519) would provide forward secrecy.
-* **Cleartext Broadcast Channel:** Unprefixed messages are intentionally broadcast in cleartext across the network for public chat room functionality; only direct `/msg` communications are encrypted.
+* **Central directory trust:** The server stores and gives out public keys, but there are no certificates or key fingerprint checks. A rogue server could theoretically swap someone's public key (man-in-the-middle).
+* **No forward secrecy:** Because messages are encrypted with the recipient's main RSA key, if that private key is ever exposed, past recorded messages could be decrypted. Adding Diffie-Hellman key exchange would fix this.
+* **Public channel is cleartext:** Normal messages without `/msg` are intentionally broadcast unencrypted like an open chat room.
 
