@@ -1,33 +1,82 @@
-# secure-cli-chat (wip)
+# Secure CLI Chat
 
-making a secure terminal messaging app from scratch. Mainly to move away from basic scripts to applied crypto. 
+A terminal-based end-to-end encrypted messaging application built in Python. Combines a multithreaded TCP server directory with hybrid cryptography (RSA-2048 OAEP and AES-128-GCM) to protect direct peer-to-peer communications.
 
-right now it just handles the networking and rsa key distribution. the actual message encryption is the next step.
+---
 
-### what it does so far
-- multi-threaded python sockets so multiple clients can connect at once.
-- generates a 2048-bit RSA key pair locally when you start the client.
-- server acts as a dumb directory. it just holds the public keys and routes traffic.
-- uses a custom byte-level protocol with `//` delimiters so the PEM formatting doesn't get corrupted over the socket.
+## Architecture & Cryptography
 
-### how to run it
-you just need python and the cryptography library.
+```
+                    ┌─────────────────────────┐
+                    │   Directory Server      │
+                    │   (Public Key Registry) │
+                    └───────┬─────────┬───────┘
+          Length-Prefixed   │         │  Length-Prefixed
+          TCP Frame         │         │  TCP Frame
+                            ▼         ▼
+                 ┌──────────────┐   ┌──────────────┐
+                 │ Client Alice │   │  Client Bob  │
+                 └──────────────┘   └──────────────┘
+                        │                  ▲
+                        └─ Encrypted DM ───┘
+                           (via Relay)
+```
 
-    pip install cryptography
+### Hybrid Cryptosystem
+1. **Asymmetric Key Exchange:** Each client generates an ephemeral 2048-bit RSA key pair on startup (`e = 65537`). The public key is serialized to PEM format and registered with the server directory.
+2. **Symmetric Payload Encryption (AEAD):** Direct messages (`/msg`) generate an ephemeral 128-bit AES key and a 96-bit cryptographically secure random nonce (`os.urandom(12)`). Payloads are encrypted using **AES-GCM**, providing authenticated encryption with integrity guarantees.
+3. **Key Encapsulation:** The AES session key is wrapped using **RSA-OAEP** with SHA-256 and MGF1, then bundled with the nonce and ciphertext into a Base64 payload.
 
-start the server first:
-   
-    python server.py
+### Length-Prefixed Protocol Framing (`protocol.py`)
+Rather than fragile string delimiters, all messages are framed over the wire using a 4-byte big-endian length prefix:
+```
+[ 4-byte Big-Endian Length (N) ] [ N bytes of UTF-8 JSON Payload ]
+```
+This guarantees strict TCP stream framing and eliminates packet fragmentation or truncation bugs across varying payload sizes.
 
-open another terminal and run the client:
+---
 
-    python client.py
+## Usage
 
-4. pick a username. it will freeze for a second to generate your keys, then send your public key to the server.
-5. type `/getkey [username]` to fetch someone else's public key from the server directory.
+### Dependencies
+```bash
+pip install cryptography
+```
 
-### to-do 
-- [x] basic multi-threaded socket chat
-- [x] rsa key generation and server-side directory
-- [x] actually use the keys to encrypt the messages (hybrid encryption with aes)
-- [ ] forward secrecy (Diffie hellman?)
+### 1. Start the Server
+```bash
+python server.py
+```
+Listens on `127.0.0.1:1234` with synchronized thread-safe client routing (`threading.Lock`).
+
+### 2. Launch Clients
+In separate terminals:
+```bash
+python client.py
+```
+
+### Client Commands
+* `/users` — Lists all connected users.
+* `/getkey <username>` — Fetches and caches the recipient's RSA public key from the directory.
+* `/msg <username> <message>` — Encrypts and transmits an end-to-end encrypted message.
+* `<message>` — Broadcasts a cleartext message to all connected clients.
+* `exit` — Disconnects and exits.
+
+---
+
+## Running Automated Tests
+
+An automated end-to-end integration test verifying registration, public key caching, hybrid encryption/decryption, and broadcast relay:
+
+```bash
+python -m unittest test_chat.py
+```
+
+---
+
+## Known Security Limitations & Design Trade-offs
+
+* **Untrusted Directory & Lack of PKI:** The central server acts as an unauthenticated key directory. A compromised or malicious server could substitute public keys (Man-In-The-Middle). Production deployment requires public key fingerprint verification (TOFU) or digital signatures.
+* **No Perfect Forward Secrecy (PFS):** Session keys are encrypted under the recipient's static session RSA key. Compromise of the private key would expose previously recorded messages. Implementing Ephemeral Diffie-Hellman (X25519) would provide forward secrecy.
+* **Cleartext Broadcast Channel:** Unprefixed messages are intentionally broadcast in cleartext across the network for public chat room functionality; only direct `/msg` communications are encrypted.
+
